@@ -23,4 +23,10 @@ PATHS = {
     'models_dir': os.path.join(BASE_DIR, 'models'),
     'best_model': os.path.join(BASE_DIR, 'models', 'best_lstm_model.pt'),
 
+
+    # Результаты
+    'results_dir': os.path.join(BASE_DIR, 'results'),
+    'test_examples': os.path.join(BASE_DIR, 'models', 'test_generation_examples.json'),
+    'gpt2_examples': os.path.join(BASE_DIR, 'models', 'gpt2_generation_examples.json'),
 }
+

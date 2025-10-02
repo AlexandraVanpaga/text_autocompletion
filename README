@@ -7,30 +7,30 @@ pip install -r requirements.txt
 
 ### Скачивание сырых данных
 
-python src\get_raw_data.py
+python -m src.get_raw_data
 
 ### Предобработка данных
-python src\preprocess_data.py
+python -m src.preprocess_data
 
 ### Подготовка данных для обучения
 
-python src\tokenize_split_data.py
+python -m src.tokenize_split_data
 
 ### Подготовка LSTM-модели
 
-python src\lstm_model.py
+python -m src.lstm_model
 
 ### Обучение LSTM-модели
 
-python src\lstm_model.py
+python -m src.lstm_train
 
 ### Оценка LSTM-модели
 
-python src\lstm_model.py
+python -m src.eval_lstm
 
 ### Оценка DistilGPT2
 
-python src\lstm_model.py
+python -m src.eval_transformer_pipeline
 
 ###Выводы по проделанной работе
 
