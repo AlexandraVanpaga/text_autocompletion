@@ -1,5 +1,6 @@
 import os
 import requests
+from config import PATHS, MODEL_CONFIG, TRAINING_CONFIG
 
 def download_file(url: str, save_path: str):
     # Создаём папку, если её ещё нет
@@ -19,6 +20,6 @@ def download_file(url: str, save_path: str):
 
 if __name__ == "__main__":
     url = "https://code.s3.yandex.net/deep-learning/tweets.txt"
-    save_path = r"C:\Users\Alexandra\Desktop\text_autocompletion\data\raw_dataset.csv"
+    save_path = PATHS['raw_data']
 
     download_file(url, save_path)
