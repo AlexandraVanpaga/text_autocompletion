@@ -5,14 +5,16 @@
 import os
 import pickle
 import json
-
+from src.dataset import TextGenerationDataset 
 import numpy as np
 import torch
+import torch.nn as nn
 import evaluate
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from config import PATHS, MODEL_CONFIG
+from config import PATHS, MODEL_CONFIG, TRAINING_CONFIG
 
 
 # =============================================================================
@@ -59,6 +61,7 @@ generator = pipeline(
 )
 
 rouge = evaluate.load("rouge")
+criterion = nn.CrossEntropyLoss(ignore_index=tokenizer_gpt.pad_token_id, reduction='none')
 
 
 # =============================================================================
@@ -88,10 +91,44 @@ def generate_continuation(text, max_new_tokens=10):
 
 
 # =============================================================================
-# Оценка на validation set
+# Подсчет loss на validation set
 # =============================================================================
 
-print("\nОценка DistilGPT2 на validation set...")
+print("\nПодсчет loss на validation set...")
+val_loader = DataLoader(val_dataset, batch_size=TRAINING_CONFIG['batch_size'], shuffle=False, num_workers=0)
+
+model_gpt.eval()
+val_loss = 0
+
+with torch.no_grad():
+    for prefix, target, mask in tqdm(val_loader, desc="Computing loss"):
+        # Токенизируем prefix для GPT2
+        prefix_text_batch = [tokenizer.decode(p.tolist(), skip_special_tokens=True) for p in prefix]
+        target_text_batch = [tokenizer.decode(t.tolist(), skip_special_tokens=True) for t in target]
+        
+        # Объединяем prefix + target для GPT2
+        full_text_batch = [p + " " + t for p, t in zip(prefix_text_batch, target_text_batch)]
+        
+        # Токенизируем для GPT2
+        inputs = tokenizer_gpt(full_text_batch, return_tensors='pt', padding=True, truncation=True, max_length=MODEL_CONFIG['max_length'])
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        
+        # Forward pass
+        outputs = model_gpt(**inputs, labels=inputs['input_ids'])
+        val_loss += outputs.loss.item()
+
+val_loss /= len(val_loader)
+val_perplexity = np.exp(val_loss)
+
+print(f"\nGPT2 Loss: {val_loss:.4f}")
+print(f"GPT2 Perplexity: {val_perplexity:.2f}")
+
+
+# =============================================================================
+# Оценка ROUGE на validation set
+# =============================================================================
+
+print("\nОценка ROUGE на validation set...")
 
 num_samples = gpt2_params['num_samples']
 sample_indices = np.random.choice(len(val_dataset), num_samples, replace=False)
@@ -116,6 +153,8 @@ gpt_rouge = rouge.compute(predictions=all_preds, references=all_refs)
 print("\n" + "="*80)
 print("РЕЗУЛЬТАТЫ DistilGPT2 НА VALIDATION SET")
 print("="*80)
+print(f"Loss:       {val_loss:.4f}")
+print(f"Perplexity: {val_perplexity:.2f}")
 print(f"ROUGE-1: {gpt_rouge['rouge1']:.4f}")
 print(f"ROUGE-2: {gpt_rouge['rouge2']:.4f}")
 print(f"ROUGE-L: {gpt_rouge['rougeL']:.4f}")
@@ -159,4 +198,4 @@ with open(PATHS['gpt2_examples'], 'w', encoding='utf-8') as f:
     json.dump(examples_data, f, ensure_ascii=False, indent=2)
 
 print(f"\nПримеры сохранены в: {PATHS['gpt2_examples']}")
-print("Готово!")
+print("Готово")

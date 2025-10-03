@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from rouge_score import rouge_scorer
-
+from src.dataset import TextGenerationDataset 
 from src.lstm_model import LSTMTextGenerator
 from config import PATHS, MODEL_CONFIG, TRAINING_CONFIG
 

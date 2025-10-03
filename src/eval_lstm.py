@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from rouge_score import rouge_scorer
-
+from src.dataset import TextGenerationDataset 
 from src.lstm_model import LSTMTextGenerator
 from config import PATHS, MODEL_CONFIG, TRAINING_CONFIG
 

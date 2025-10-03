@@ -21,7 +21,7 @@ TRAINING_CONFIG = {
     'random_state': 42,
     
     # DataLoader
-    'num_workers': 2,
+    'num_workers': 0,
     'pin_memory': True,
     
     # Evaluation
