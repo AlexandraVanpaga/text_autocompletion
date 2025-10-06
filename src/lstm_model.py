@@ -154,16 +154,24 @@ class LSTMTextGenerator(nn.Module):
         with torch.no_grad():
             _, hidden = self.forward(prefix)
         
-        # Инициализируем генерацию с последнего токена префикса
-        current_token = prefix[:, -1].unsqueeze(1)  # [batch_size, 1]
+        # ИСПРАВЛЕНИЕ: Находим последний НЕ-PAD токен в каждой последовательности
+        mask = (prefix != pad_token_id)  # [batch_size, seq_len]
+        lengths = mask.sum(dim=1)  # Реальная длина каждой последовательности
+        
+        # Проверка: если вся последовательность из PAD (не должно быть, но на всякий случай)
+        lengths = torch.clamp(lengths, min=1)
+        
+        # Извлекаем последний реальный токен для каждого примера в батче
+        indices = lengths - 1  # Индекс последнего НЕ-PAD токена
+        current_token = prefix[torch.arange(batch_size, device=device), indices].unsqueeze(1)  # [batch_size, 1]
+        
         generated = []
         
         # Словарь для отслеживания сгенерированных токенов (для repetition penalty)
         generated_tokens = {i: [] for i in range(batch_size)}
         
-        # Добавлена маска для отслеживания завершённых последовательностей
+        # Маска для отслеживания завершённых последовательностей
         finished = torch.zeros(batch_size, dtype=torch.bool, device=device)
-        #
         
         for _ in range(max_length):
             with torch.no_grad():
@@ -171,9 +179,8 @@ class LSTMTextGenerator(nn.Module):
                 logits, hidden = self.forward(current_token, hidden)  # [batch_size, 1, vocab_size]
                 
                 # Отсоединяем hidden state от графа вычислений 
-                # ИСПРАВЛЕНИЕ: Предотвращает накопление вычислительных графов и утечку памяти
+                #  Предотвращает накопление вычислительных графов и утечку памяти
                 hidden = tuple(h.detach() for h in hidden)
-                
                 
                 logits = logits[:, -1, :]  # [batch_size, vocab_size]
                 
@@ -185,10 +192,9 @@ class LSTMTextGenerator(nn.Module):
                     for token in generated_tokens[i]:
                         logits[i, token] /= repetition_penalty
                 
-                #  Маскируем pad токен, чтобы он не генерировался 
-                #  Запрещаем модели генерировать pad токены во время активной генерации
+                # Маскируем pad токен, чтобы он не генерировался 
+                # Запрещаем модели генерировать pad токены во время активной генерации
                 logits[:, pad_token_id] = float('-inf')
-              
                 
                 # Top-k filtering (оставляем только топ-k токенов)
                 if top_k > 0:
@@ -203,16 +209,15 @@ class LSTMTextGenerator(nn.Module):
                 # Sampling (случайный выбор с учётом вероятностей)
                 next_token = torch.multinomial(probs, num_samples=1)  # [batch_size, 1]
                 
-                #  Заменяем токены для завершённых последовательностей на pad 
+                # Заменяем токены для завершённых последовательностей на pad 
                 # Для уже завершённых последовательностей добавляем только pad токены
                 next_token[finished] = pad_token_id
-             
                 
                 # Сохраняем токен
                 generated.append(next_token)
                 
                 # Обновляем историю только для незавершённых последовательностей
-                # ИСПРАВЛЕНИЕ: Обновляем историю для repetition penalty только для активных последовательностей
+                #  Обновляем историю для repetition penalty только для активных последовательностей
                 for i in range(batch_size):
                     if not finished[i]:  # Проверяем, не завершена ли последовательность
                         token_id = next_token[i].item()
@@ -220,16 +225,14 @@ class LSTMTextGenerator(nn.Module):
                             finished[i] = True  # Помечаем последовательность как завершённую
                         else:
                             generated_tokens[i].append(token_id)
-               
                 
                 # Следующий токен становится текущим
                 current_token = next_token
                 
-                #  Досрочный выход, если все последовательности завершены 
+                # Досрочный выход, если все последовательности завершены 
                 # Оптимизация: прерываем генерацию, если все последовательности в батче завершены
                 if finished.all():
                     break
-                
         
         # Собираем результат
         generated = torch.cat(generated, dim=1)  # [batch_size, max_length]

@@ -17,6 +17,38 @@ from src.lstm_model import LSTMTextGenerator
 from config import PATHS, MODEL_CONFIG, TRAINING_CONFIG
 
 
+def get_last_real_token(prefix, pad_token_id):
+    """
+    Находит последний НЕ-PAD токен в каждой последовательности батча.
+    
+    Args:
+        prefix: [batch_size, seq_len] - префикс с возможным padding
+        pad_token_id: ID токена padding
+    
+    Returns:
+        last_tokens: [batch_size, 1] - последние реальные токены
+    """
+    batch_size = prefix.size(0)
+    device = prefix.device
+    
+    # Маска реальных токенов (не PAD)
+    mask = (prefix != pad_token_id)  # [batch_size, seq_len]
+    
+    # Длина каждой последовательности
+    lengths = mask.sum(dim=1)  # [batch_size]
+    
+    # Защита от полностью PAD последовательностей
+    lengths = torch.clamp(lengths, min=1)
+    
+    # Индексы последних реальных токенов
+    indices = lengths - 1  # [batch_size]
+    
+    # Извлекаем последние реальные токены
+    last_tokens = prefix[torch.arange(batch_size, device=device), indices]
+    
+    return last_tokens.unsqueeze(1)  # [batch_size, 1]
+
+
 def load_datasets_and_tokenizer():
     """Загружаем сохранённые датасеты и токенизатор"""
     print("Загрузка данных...")
@@ -91,7 +123,7 @@ def train():
     best_val_loss = float('inf')
 
     for epoch in range(1, TRAINING_CONFIG['num_epochs'] + 1):
-        # ---------- Train ----------
+        #  Train 
         model.train()
         train_loss = 0
         for prefix, target, mask in tqdm(train_loader, desc=f"Epoch {epoch}"):
@@ -99,7 +131,11 @@ def train():
 
             optimizer.zero_grad()
             _, hidden = model(prefix)
-            decoder_input = torch.cat([prefix[:, -1:], target[:, :-1]], dim=1)
+            
+            # ИСПРАВЛЕНИЕ: Берём последний реальный токен, а не PAD
+            last_real_token = get_last_real_token(prefix, tokenizer.pad_token_id)
+            decoder_input = torch.cat([last_real_token, target[:, :-1]], dim=1)
+            
             logits, _ = model(decoder_input, hidden)
 
             loss = criterion(logits.reshape(-1, logits.size(-1)), target.reshape(-1))
@@ -112,7 +148,7 @@ def train():
 
         train_loss /= len(train_loader)
 
-        # ---------- Validation + ROUGE ----------
+        #  Validation + ROUGE 
         model.eval()
         val_loss = 0
         rouge_scores = {'rouge1': [], 'rouge2': [], 'rougeL': []}
@@ -122,7 +158,11 @@ def train():
                 prefix, target, mask = prefix.to(device), target.to(device), mask.to(device)
 
                 _, hidden = model(prefix)
-                decoder_input = torch.cat([prefix[:, -1:], target[:, :-1]], dim=1)
+                
+                #  Берём последний реальный токен
+                last_real_token = get_last_real_token(prefix, tokenizer.pad_token_id)
+                decoder_input = torch.cat([last_real_token, target[:, :-1]], dim=1)
+                
                 logits, _ = model(decoder_input, hidden)
 
                 loss = criterion(logits.reshape(-1, logits.size(-1)), target.reshape(-1))
@@ -166,10 +206,10 @@ def train():
     print("\nОбучение завершено!")
 
 
-# =========================================================
+
 # Точка входа для Windows multiprocessing
-# =========================================================
+
 if __name__ == "__main__":
     import multiprocessing
-    multiprocessing.set_start_method('spawn', force=True)  # важно для Windows
+    multiprocessing.set_start_method('spawn', force=True)  
     train()
